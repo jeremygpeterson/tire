@@ -43,6 +43,10 @@ module Tire
           end
         end
 
+        should "have __host_unreachable_exceptions" do
+          assert_respond_to Client::RestClient, :__host_unreachable_exceptions
+        end
+
       end
 
       if defined?(Curl)
@@ -67,6 +71,22 @@ module Tire
             ::Curl::Easy.any_instance.expects(:http_get)
 
             response = Configuration.client.get "http://localhost:9200/articles/article/1"
+          end
+
+          should "be threadsafe" do
+            threads = []
+
+            %w| foo bar |.each do |q|
+              threads << Thread.new do
+                Tire.search { query { match :_all, q } }.results.to_a
+              end
+            end
+
+            threads.each { |t| t.join() }
+          end
+
+          should "have __host_unreachable_exceptions" do
+            assert_respond_to Client::RestClient, :__host_unreachable_exceptions
           end
 
         end

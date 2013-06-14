@@ -50,6 +50,10 @@ module Tire
           end
         end
 
+        should "define property as a string by default" do
+          assert_equal 'string', PersistentArticle.mapping[:title][:type]
+        end
+
       end
 
       context "Finders" do
@@ -307,10 +311,20 @@ module Tire
             assert_equal '4chan',       article.comments.first.nick
           end
 
-          should "automatically format strings in UTC format as Time" do
+          should "automatically format strings in ISO8601 with the default UTC designator" do
             article = PersistentArticle.new :published_on => '2011-11-01T23:00:00Z'
             assert_instance_of Time, article.published_on
             assert_equal 2011, article.published_on.year
+            assert_equal 23, article.published_on.hour
+            assert_equal 00, article.published_on.min
+          end
+
+          should "automatically format strings in ISO8601 with a time zone offset" do
+            article = PersistentArticle.new :published_on => '2011-11-01T00:00:00+01:00'
+            assert_instance_of Time, article.published_on
+            assert_equal 2011, article.published_on.year
+            assert_equal 23, article.published_on.hour
+            assert_equal 00, article.published_on.min
           end
 
           should "cast anonymous Hashes as Hashr instances" do
@@ -377,10 +391,6 @@ module Tire
             assert ! ValidatedModel.create(:name => nil)
           end
 
-        end
-
-        context "when creating" do
-
           should "set the id property" do
             Configuration.client.expects(:post).
                                  with do |url, payload|
@@ -406,6 +416,14 @@ module Tire
 
             article = PersistentArticle.create :id => '123', :title => 'Test'
             assert_equal '123', article.id
+          end
+
+          should "return false when the operation fails" do
+            Configuration.client.expects(:post).
+                                 returns(mock_response('{"ok":false}', 400))
+
+            article = PersistentArticleWithStrictMapping.create :title => 'Test'
+            assert_equal false, article
           end
 
         end
@@ -469,6 +487,14 @@ module Tire
              assert_equal '456', article.id
           end
 
+          should "return false when the operation fails" do
+            Configuration.client.expects(:post).
+                                 returns(mock_response('{"ok":false}', 400))
+
+            article = PersistentArticleWithStrictMapping.new
+            assert_equal false, article.save
+          end
+
         end
 
         context "when destroying" do
@@ -490,6 +516,14 @@ module Tire
             article.destroy
           end
 
+          should "return false when the operation fails" do
+            Configuration.client.expects(:delete).
+                                 returns(mock_response('{"ok":false}', 400))
+
+            article = PersistentArticleWithStrictMapping.new
+            assert_equal false, article.destroy
+          end
+
         end
 
         context "when updating attributes" do
@@ -509,6 +543,14 @@ module Tire
             assert_equal ['three'], @article.tags
           end
 
+          should "return false when the operation fails" do
+            Configuration.client.expects(:post).
+                                 returns(mock_response('{"ok":false}', 400))
+
+            article = PersistentArticleWithStrictMapping.new
+            assert_equal false, article.update_attributes(:created => 'NOTVALID')
+          end
+
         end
 
       end
@@ -519,6 +561,7 @@ module Tire
           expected = {
             :settings => {},
             :mappings => { :persistent_article_with_mapping => {
+              :dynamic => 'strict',
               :properties => { :title => { :type => 'string', :analyzer => 'snowball', :boost => 10 } }
             }}
           }
@@ -532,7 +575,7 @@ module Tire
             include Tire::Model::Search
             include Tire::Model::Callbacks
 
-            mapping do
+            mapping :dynamic => 'strict' do
               property :title, :type => 'string', :analyzer => 'snowball', :boost => 10
             end
 
